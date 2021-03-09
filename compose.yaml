@@ -1,0 +1,216 @@
+{
+  "hostname": "database",
+  "image": "postgres:12.4",
+  "restart": "always",
+  "environment": {
+    "POSTGRES_USER": "user",
+    "POSTGRES_PASSWORD": "password",
+    "POSTGRES_DB": "fds"
+  },
+  "expose": [
+    5432
+  ],
+  "volumes": [
+    "./postgres-data:/var/lib/postgresql/data"
+  ]
+}
+mosquitto	
+{
+  "hostname": "mosquitto",
+  "image": "eclipse-mosquitto:1.6.12",
+  "restart": "always",
+  "expose": [
+    1883
+  ],
+  "ports": [
+    "9001:9001"
+  ],
+  "volumes": [
+    "./mosquitto/config:/mosquitto/config"
+  ]
+}
+db-synchronizer	
+{
+  "hostname": "synchronizer",
+  "image": "aidilab/fds-db-synchronizer:0.1",
+  "restart": "always",
+  "environment": {
+    "LOG_LEVEL": "DEBUG",
+    "MQTT_HOSTNAME": "mosquitto",
+    "MQTT_PORT": 1883,
+    "CLIENT_ID": "SYNC_1",
+    "DB_HOST": "database",
+    "DB_PORT": 5432,
+    "DB_USERNAME": "user",
+    "DB_PASSWORD": "password",
+    "DB_DATABASE": "fds",
+    "CONFIG_FILE": "/config/config.ini"
+  },
+  "volumes": [
+    "./db-sync-config/:/config/"
+  ]
+}
+charge-controller-1	
+{
+  "image": "aidilab/fds-charge-controller:0.1",
+  "restart": "always",
+  "depends_on": [
+    "mosquitto",
+    "dashboard"
+  ],
+  "environment": {
+    "ENABLE": 1,
+    "CONFIG_FILE": "/config/config.ini",
+    "LOG_LEVEL": "DEBUG",
+    "CLIENT_ID": "CC_1",
+    "MQTT_HOSTNAME": "mosquitto",
+    "MQTT_PORT": 1883,
+    "READING_INTERVAL": 10,
+    "MODBUS_IP": "192.168.2.253",
+    "MODBUS_PORT": 502,
+    "MODBUS_UNIT": 1,
+    "DUMMY_DATA": 0
+  },
+  "volumes": [
+    "./cc1-config/:/config/"
+  ]
+}
+charge-controller-2	
+{
+  "image": "aidilab/fds-charge-controller:0.1",
+  "restart": "always",
+  "depends_on": [
+    "mosquitto",
+    "dashboard"
+  ],
+  "environment": {
+    "ENABLE": 1,
+    "CONFIG_FILE": "/config/config.ini",
+    "LOG_LEVEL": "DEBUG",
+    "CLIENT_ID": "CC_2",
+    "MQTT_HOSTNAME": "mosquitto",
+    "MQTT_PORT": 1883,
+    "READING_INTERVAL": 10,
+    "MODBUS_IP": "192.168.2.253",
+    "MODBUS_PORT": 502,
+    "MODBUS_UNIT": 20,
+    "DUMMY_DATA": 0
+  },
+  "volumes": [
+    "./cc2-config/:/config/"
+  ]
+}
+mcu-1	
+{
+  "image": "aidilab/fds-mcu:0.1",
+  "restart": "always",
+  "depends_on": [
+    "mosquitto",
+    "dashboard"
+  ],
+  "privileged": true,
+  "environment": {
+    "ENABLE": 1,
+    "CONFIG_FILE": "/config/config.ini",
+    "LOG_LEVEL": "DEBUG",
+    "CLIENT_ID": "MCU_1",
+    "MQTT_HOSTNAME": "mosquitto",
+    "MQTT_PORT": 1883,
+    "READING_INTERVAL": 10,
+    "MCU_I2C_BUS": 1,
+    "MCU_I2C_ADDRESS": 39,
+    "DUMMY_DATA": 0
+  },
+  "volumes": [
+    "./mcu1-config/:/config/"
+  ]
+}
+relay-box-1	
+{
+  "image": "aidilab/fds-relay-box:0.1",
+  "restart": "always",
+  "depends_on": [
+    "mosquitto",
+    "dashboard"
+  ],
+  "environment": {
+    "ENABLE": 1,
+    "CONFIG_FILE": "/config/config.ini",
+    "LOG_LEVEL": "DEBUG",
+    "CLIENT_ID": "RB_1",
+    "MQTT_HOSTNAME": "mosquitto",
+    "MQTT_PORT": 1883,
+    "READING_INTERVAL": 10,
+    "MODBUS_IP": "192.168.2.253",
+    "MODBUS_PORT": 502,
+    "MODBUS_UNIT": 9,
+    "DUMMY_DATA": 0
+  },
+  "volumes": [
+    "./rb1-config/:/config/"
+  ]
+}
+mic-connector	
+{
+  "image": "aidilab/fds-telenor-connector:0.1",
+  "restart": "always",
+  "depends_on": [
+    "mosquitto"
+  ],
+  "environment": {
+    "ENABLE": 1,
+    "CONFIG_FILE": "/config/config.ini",
+    "MQTT_HOSTNAME": "mosquitto",
+    "MQTT_PORT": 1883,
+    "CLIENT_ID": "MIC_CONNECTOR",
+    "SENSORS_DIRECTORY": "/synthetic-brain/sensors"
+  },
+  "volumes": [
+    "./synthetic-brain/:/synthetic-brain/",
+    "./mic-config/:/config/"
+  ]
+}
+agent	
+{
+  "image": "aidilab/iot-tcxn-agent:latest",
+  "hostname": "iot-tcxn-agent",
+  "restart": "always",
+  "volumes": [
+    "./configurations/agent:/app/config/",
+    "./synthetic-brain/:/synthetic-brain/"
+  ]
+}
+dashboard	
+{
+  "hostname": "dashboard",
+  "image": "aidilab/fds-dashboard:0.1",
+  "restart": "always",
+  "depends_on": [
+    "database",
+    "mosquitto"
+  ],
+  "ports": [
+    "8084:8084"
+  ],
+  "environment": {
+    "APPLICATION_PORT": 8084,
+    "DATABASE_HOST": "database",
+    "DATABASE_PORT": 5432,
+    "DATABASE_USERNAME": "user",
+    "DATABASE_PASSWORD": "password",
+    "DATABASE_DB": "fds",
+    "EXPORT_PATH": "/export",
+    "MQTT_HOSTNAME": "mqtt://mosquitto",
+    "MQTT_CLIENT_ID": "DASHBOARD"
+  },
+  "volumes": [
+    "./dashboard-config/exports:/app/public/export"
+  ],
+  "command": [
+    "./wait-for-it.sh",
+    "database:5432",
+    "--",
+    "node",
+    "dist/main"
+  ]
+}
